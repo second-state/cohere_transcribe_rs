@@ -226,6 +226,12 @@ jobs:
             --dest-dir   "$DIR/lib" \
             --install-path @loader_path/lib
 
+          # Metal shader library — compiled when mlx-c is built from source.
+          # dylibbundler only handles dylibs; the metallib must be copied separately.
+          find /opt/mlx -name "*.metallib" -exec cp {} "$DIR/lib/" \;
+          find "$(brew --prefix mlx)" -name "*.metallib" -exec cp {} "$DIR/lib/" \;
+          ls -lh "$DIR/lib/"
+
           zip -r "$DIR.zip" "$DIR"
           echo "=== Package contents ==="
           zipinfo "$DIR.zip" | head -30
