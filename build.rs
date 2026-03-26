@@ -15,13 +15,21 @@ fn main() {
 /// build time so the binary is self-contained with respect to library lookup.
 fn build_tch() {
     let libtorch = std::env::var("LIBTORCH").unwrap_or_else(|_| "/opt/libtorch".to_string());
-    let lib_dir = format!("{}/lib", libtorch);
 
-    // Embed as RPATH (Linux ELF RUNPATH) — the dynamic linker uses this at
-    // runtime without any environment variable.
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir);
+    // For release packages the binary must find libtorch relative to itself
+    // ($ORIGIN = directory containing the ELF binary), so the user can unzip
+    // and run without any environment variables.
+    // For dev/CI builds we embed the absolute LIBTORCH path instead.
+    let rpath = if std::env::var("RELEASE_RPATH_ORIGIN").is_ok() {
+        "$ORIGIN/libtorch/lib".to_string()
+    } else {
+        format!("{}/lib", libtorch)
+    };
+
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath);
 
     println!("cargo:rerun-if-env-changed=LIBTORCH");
+    println!("cargo:rerun-if-env-changed=RELEASE_RPATH_ORIGIN");
     println!("cargo:rerun-if-changed=build.rs");
 }
 
@@ -50,8 +58,12 @@ fn build_mlx() {
     // mlx-c: C wrapper around the MLX C++ library
     println!("cargo:rustc-link-lib=dylib=mlxc");
 
-    // Embed RPATH so the binary finds libmlxc.dylib at runtime
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir);
+    // Embed RPATH so the binary finds libmlxc.dylib at runtime.
+    // For release packages we skip this — dylibbundler rewrites all dylib
+    // load commands to @loader_path/lib after the build, so no rpath is needed.
+    if std::env::var("RELEASE_RPATH_ORIGIN").is_err() {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir);
+    }
 
     // Apple system frameworks required by MLX
     println!("cargo:rustc-link-lib=framework=Metal");
@@ -64,5 +76,6 @@ fn build_mlx() {
     println!("cargo:rustc-link-lib=c++");
 
     println!("cargo:rerun-if-env-changed=MLX_DIR");
+    println!("cargo:rerun-if-env-changed=RELEASE_RPATH_ORIGIN");
     println!("cargo:rerun-if-changed=build.rs");
 }

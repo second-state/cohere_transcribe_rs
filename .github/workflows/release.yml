@@ -1,0 +1,194 @@
+name: Release
+
+# Triggered when a GitHub Release is published.
+# Builds CLI + API-server binaries for all three platforms, bundles each with
+# its native runtime library (libtorch on Linux, mlx-c + MLX on macOS), and
+# uploads the resulting zip files as release assets.
+
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+  LIBTORCH_BYPASS_VERSION_CHECK: "1"
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Download only the SentencePiece tokenizer file from HuggingFace (~800 KB)
+  # and convert it to vocab.json once; all build jobs share the artifact.
+  # ─────────────────────────────────────────────────────────────────────────────
+  generate-vocab:
+    name: Generate vocab.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download tokenizer from HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install -q huggingface_hub sentencepiece
+          huggingface-cli download CohereLabs/cohere-transcribe-03-2026 \
+            --include "tokenizer.model" \
+            --local-dir models/cohere-transcribe-03-2026 \
+            --token "$HF_TOKEN"
+          python tools/extract_vocab.py --model_dir models/cohere-transcribe-03-2026
+
+      - name: Upload vocab artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vocab
+          path: models/cohere-transcribe-03-2026/vocab.json
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build both binaries (transcribe CLI + transcribe-server) for each platform,
+  # bundle with native libraries, and upload as a release asset zip.
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.name }})
+    needs: generate-vocab
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Linux x86_64 — CPU libtorch ───────────────────────────────────
+          - os: ubuntu-latest
+            name: Linux x86_64
+            backend: tch
+            asset-name: transcribe-linux-x86_64
+            libtorch-url: >-
+              https://github.com/second-state/libtorch-releases/releases/download/v2.7.1/libtorch-cxx11-abi-x86_64-2.7.1.tar.gz
+
+          # ── Linux aarch64 — CPU libtorch (SVE256, Graviton3 / Altra) ─────
+          - os: ubuntu-24.04-arm
+            name: Linux aarch64
+            backend: tch
+            asset-name: transcribe-linux-aarch64
+            libtorch-url: >-
+              https://github.com/second-state/libtorch-releases/releases/download/v2.7.1/libtorch-cxx11-abi-aarch64-2.7.1.tar.gz
+
+          # ── macOS Apple Silicon — MLX backend ────────────────────────────
+          - os: macos-15
+            name: macOS Apple Silicon
+            backend: mlx
+            asset-name: transcribe-macos-aarch64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      # ── libtorch (Linux) ──────────────────────────────────────────────────
+      - name: Download and extract libtorch
+        if: matrix.backend == 'tch'
+        run: |
+          curl -fsSLo libtorch.tar.gz "${{ matrix.libtorch-url }}"
+          tar xzf libtorch.tar.gz          # → ./libtorch/
+          rm libtorch.tar.gz
+
+      # ── mlx-c (macOS) ─────────────────────────────────────────────────────
+      - name: Install MLX and dylibbundler via Homebrew
+        if: matrix.backend == 'mlx'
+        run: brew install mlx dylibbundler
+
+      - name: Build mlx-c from source
+        if: matrix.backend == 'mlx'
+        run: |
+          git clone --depth 1 https://github.com/ml-explore/mlx-c.git /tmp/mlx-c
+          cmake -S /tmp/mlx-c -B /tmp/mlx-c/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix mlx)" \
+            -DCMAKE_INSTALL_PREFIX=/opt/mlx
+          cmake --build /tmp/mlx-c/build --parallel "$(sysctl -n hw.logicalcpu)"
+          sudo cmake --install /tmp/mlx-c/build
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build release binaries (tch-backend)
+        if: matrix.backend == 'tch'
+        env:
+          LIBTORCH: ${{ github.workspace }}/libtorch
+          # RELEASE_RPATH_ORIGIN=1 makes build.rs emit $ORIGIN/libtorch/lib
+          # instead of the absolute workspace path, so the binaries find
+          # libtorch in the adjacent libtorch/ folder when deployed.
+          RELEASE_RPATH_ORIGIN: "1"
+        run: cargo build --release
+
+      - name: Build release binaries (mlx)
+        if: matrix.backend == 'mlx'
+        env:
+          MLX_DIR: /opt/mlx
+          # RELEASE_RPATH_ORIGIN=1 suppresses the absolute-path rpath from
+          # build.rs; dylibbundler (below) rewrites all dylib load commands to
+          # @loader_path/lib and adds that rpath to the binaries.
+          RELEASE_RPATH_ORIGIN: "1"
+        run: MLX_DIR=/opt/mlx cargo build --release --no-default-features --features mlx
+
+      # ── Download shared vocab ─────────────────────────────────────────────
+      - name: Download vocab.json
+        uses: actions/download-artifact@v4
+        with:
+          name: vocab
+
+      # ── Package (Linux / tch) ─────────────────────────────────────────────
+      - name: Package release (Linux)
+        if: matrix.backend == 'tch'
+        run: |
+          DIR=${{ matrix.asset-name }}
+          mkdir -p "$DIR/libtorch/lib"
+
+          # Binaries
+          cp target/release/transcribe        "$DIR/transcribe"
+          cp target/release/transcribe-server "$DIR/transcribe-server"
+          cp vocab.json                       "$DIR/vocab.json"
+
+          # Runtime libraries only (skip headers and cmake files to save space)
+          cp -r libtorch/lib/. "$DIR/libtorch/lib/"
+
+          # Strip debug info from our binaries
+          strip "$DIR/transcribe" "$DIR/transcribe-server"
+
+          zip -r "$DIR.zip" "$DIR"
+          echo "=== Package contents ==="
+          zipinfo "$DIR.zip" | head -30
+
+      # ── Package (macOS / mlx) ─────────────────────────────────────────────
+      - name: Package release (macOS)
+        if: matrix.backend == 'mlx'
+        run: |
+          DIR=${{ matrix.asset-name }}
+          mkdir -p "$DIR/lib"
+
+          # Binaries
+          cp target/release/transcribe        "$DIR/transcribe"
+          cp target/release/transcribe-server "$DIR/transcribe-server"
+          cp vocab.json                       "$DIR/vocab.json"
+
+          # Bundle all non-system dylibs (libmlxc + libmlx + transitive deps)
+          # into lib/, rewrite load commands to @loader_path/lib, and add that
+          # rpath entry to both binaries.
+          dylibbundler \
+            --overwrite-dir \
+            --bundle-deps \
+            --fix-file   "$DIR/transcribe" \
+            --fix-file   "$DIR/transcribe-server" \
+            --dest-dir   "$DIR/lib" \
+            --install-path @loader_path/lib
+
+          zip -r "$DIR.zip" "$DIR"
+          echo "=== Package contents ==="
+          zipinfo "$DIR.zip" | head -30
+
+      # ── Upload to GitHub Release ──────────────────────────────────────────
+      - name: Upload release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "${{ matrix.asset-name }}.zip"
