@@ -119,7 +119,6 @@ chunks (5 s overlap) and the transcripts concatenated.
 | `Cargo.toml` | Features: `tch-backend` (default), `mlx`. `tch = { version = "0.20", optional = true }`. |
 | `.cargo/config.toml` | `LIBTORCH_BYPASS_VERSION_CHECK=1`. |
 | `build.rs` | Links Metal frameworks when `mlx` feature active; links libtorch rpath for `tch-backend`. |
-| `transcribe.sh` | Locates libtorch, sets `LD_LIBRARY_PATH`, runs binary (Linux). |
 | `.github/workflows/ci.yml` | CI: Linux x86\_64 (tch), Linux aarch64 (tch), macOS M-series (mlx). |
 | `.gitignore` | Excludes `models/`, `*.safetensors`, `libtorch/`, `/target`. |
 
@@ -220,7 +219,7 @@ with wave.open('/tmp/test.wav','wb') as f:
     f.setnchannels(1); f.setsampwidth(2); f.setframerate(sr)
     f.writeframes(struct.pack('<'+'h'*len(s),*s))
 "
-./transcribe.sh --model-dir models/cohere-transcribe-03-2026 /tmp/test.wav
+./target/release/transcribe --model-dir models/cohere-transcribe-03-2026 /tmp/test.wav
 
 # Full transcription test requires a real speech file and ≥ 8 GB RAM.
 ```
