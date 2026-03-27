@@ -104,6 +104,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        if: matrix.backend == 'tch'
+
+      - uses: actions/checkout@v4
+        if: matrix.backend == 'mlx'
+        with:
+          submodules: recursive
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -133,22 +139,6 @@ jobs:
           tar xzf libtorch.tar.gz          # → ./libtorch/
           rm libtorch.tar.gz
 
-      # ── mlx-c (macOS) ─────────────────────────────────────────────────────
-      - name: Install MLX and dylibbundler via Homebrew
-        if: matrix.backend == 'mlx'
-        run: brew install mlx dylibbundler
-
-      - name: Build mlx-c from source
-        if: matrix.backend == 'mlx'
-        run: |
-          git clone --depth 1 https://github.com/ml-explore/mlx-c.git /tmp/mlx-c
-          cmake -S /tmp/mlx-c -B /tmp/mlx-c/build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix mlx)" \
-            -DCMAKE_INSTALL_PREFIX=/opt/mlx
-          cmake --build /tmp/mlx-c/build --parallel "$(sysctl -n hw.logicalcpu)"
-          sudo cmake --install /tmp/mlx-c/build
-
       # ── Set linker flags for CUDA builds ──────────────────────────────────
       - name: Set CUDA linker flags
         if: matrix.needs-cuda
@@ -170,13 +160,7 @@ jobs:
 
       - name: Build release binaries (mlx)
         if: matrix.backend == 'mlx'
-        env:
-          MLX_DIR: /opt/mlx
-          # RELEASE_RPATH_ORIGIN=1 suppresses the absolute-path rpath from
-          # build.rs; dylibbundler (below) rewrites all dylib load commands to
-          # @loader_path/lib and adds that rpath to the binaries.
-          RELEASE_RPATH_ORIGIN: "1"
-        run: MLX_DIR=/opt/mlx cargo build --release --no-default-features --features mlx
+        run: cargo build --release --no-default-features --features mlx
 
       # ── Download shared vocab ─────────────────────────────────────────────
       - name: Download vocab.json
@@ -211,29 +195,16 @@ jobs:
         if: matrix.backend == 'mlx'
         run: |
           DIR=${{ matrix.asset-name }}
-          mkdir -p "$DIR/lib"
+          mkdir -p "$DIR"
 
-          # Binaries
+          # Binaries (statically linked — no dylibs to bundle)
           cp target/release/transcribe        "$DIR/transcribe"
           cp target/release/transcribe-server "$DIR/transcribe-server"
           cp vocab.json                       "$DIR/vocab.json"
 
-          # Bundle all non-system dylibs (libmlxc + libmlx + transitive deps)
-          # into lib/, rewrite load commands to @loader_path/lib, and add that
-          # rpath entry to both binaries.
-          dylibbundler \
-            --overwrite-dir \
-            --bundle-deps \
-            --fix-file   "$DIR/transcribe" \
-            --fix-file   "$DIR/transcribe-server" \
-            --dest-dir   "$DIR/lib" \
-            --install-path @loader_path/lib
-
-          # Metal shader library — compiled when mlx-c is built from source.
-          # dylibbundler only handles dylibs; the metallib must be copied separately.
-          find /opt/mlx -name "*.metallib" -exec cp {} "$DIR/lib/" \;
-          find "$(brew --prefix mlx)" -name "*.metallib" -exec cp {} "$DIR/lib/" \;
-          ls -lh "$DIR/lib/"
+          # Metal shader library — compiled by CMake when building mlx-c submodule
+          find target/release/build -name "mlx.metallib" -exec cp {} "$DIR/" \;
+          ls -lh "$DIR/"
 
           zip -r "$DIR.zip" "$DIR"
           echo "=== Package contents ==="

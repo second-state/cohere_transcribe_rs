@@ -312,6 +312,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -326,33 +328,6 @@ jobs:
           key: macos-arm64-mlx-integ-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: macos-arm64-mlx-integ-cargo-
 
-      - name: Install MLX via Homebrew
-        id: mlx-version
-        run: |
-          brew install mlx
-          MLX_VER=$(brew info --json mlx | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['versions']['stable'])")
-          echo "version=$MLX_VER" >> "$GITHUB_OUTPUT"
-          echo "MLX version: $MLX_VER"
-
-      - name: Cache mlx-c
-        id: cache-mlxc
-        uses: actions/cache@v4
-        with:
-          path: /opt/mlx
-          key: mlxc-${{ runner.os }}-integ-${{ steps.mlx-version.outputs.version }}
-          restore-keys: mlxc-${{ runner.os }}-integ-
-
-      - name: Build mlx-c (if not cached)
-        if: steps.cache-mlxc.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 https://github.com/ml-explore/mlx-c.git /tmp/mlx-c
-          cmake -S /tmp/mlx-c -B /tmp/mlx-c/build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix mlx)" \
-            -DCMAKE_INSTALL_PREFIX=/opt/mlx
-          cmake --build /tmp/mlx-c/build --parallel "$(sysctl -n hw.logicalcpu)"
-          sudo cmake --install /tmp/mlx-c/build
-
       - name: Restore model weights from cache
         uses: actions/cache/restore@v4
         with:
@@ -361,7 +336,7 @@ jobs:
           fail-on-cache-miss: true
 
       - name: Build both binaries (MLX backend)
-        run: MLX_DIR=/opt/mlx cargo build --release --no-default-features --features mlx
+        run: cargo build --release --no-default-features --features mlx
 
       - name: CLI — transcribe sample2.wav
         run: |

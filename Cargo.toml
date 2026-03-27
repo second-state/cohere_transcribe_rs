@@ -59,6 +59,9 @@ default = ["tch-backend"]
 tch-backend = ["dep:tch"]
 mlx = []
 
+[build-dependencies]
+cmake = "0.1"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

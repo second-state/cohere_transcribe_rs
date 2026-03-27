@@ -33,49 +33,55 @@ fn build_tch() {
     println!("cargo:rerun-if-changed=build.rs");
 }
 
-/// Link Apple MLX C library and required macOS frameworks, and embed the
-/// library path as RPATH so the binary runs without DYLD_LIBRARY_PATH.
+/// Build mlx-c from the git submodule via CMake and link statically.
+/// This mirrors the approach in second-state/qwen3_asr_rs: the submodule
+/// pulls in mlx-c which fetches and builds the MLX C++ library as a
+/// dependency, producing static libraries and a compiled Metal shader
+/// library (mlx.metallib).
 ///
-/// Expected layout (configurable via MLX_DIR env var, default /opt/mlx):
-///   $MLX_DIR/lib/libmlxc.dylib
-///   $MLX_DIR/include/mlx/c/
-///
-/// Build mlx-c from source:
-///   brew install mlx
-///   git clone --depth 1 https://github.com/ml-explore/mlx-c /tmp/mlx-c
-///   cmake -S /tmp/mlx-c -B /tmp/mlx-c/build \
-///     -DCMAKE_BUILD_TYPE=Release \
-///     -DCMAKE_PREFIX_PATH=$(brew --prefix mlx) \
-///     -DCMAKE_INSTALL_PREFIX=/opt/mlx
-///   cmake --build /tmp/mlx-c/build --parallel && sudo cmake --install /tmp/mlx-c/build
+/// No Homebrew, no dylibbundler, no DYLD_LIBRARY_PATH — fully self-contained.
 fn build_mlx() {
-    let mlx_dir = std::env::var("MLX_DIR").unwrap_or_else(|_| "/opt/mlx".to_string());
-    let lib_dir = format!("{}/lib", mlx_dir);
-
-    // Library search path (link time)
-    println!("cargo:rustc-link-search=native={}", lib_dir);
-
-    // mlx-c: C wrapper around the MLX C++ library
-    println!("cargo:rustc-link-lib=dylib=mlxc");
-
-    // Embed RPATH so the binary finds libmlxc.dylib at runtime.
-    // For release packages we skip this — dylibbundler rewrites all dylib
-    // load commands to @loader_path/lib after the build, so no rpath is needed.
-    if std::env::var("RELEASE_RPATH_ORIGIN").is_err() {
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir);
+    let mlx_c_dir = std::path::PathBuf::from("mlx-c");
+    if !mlx_c_dir.join("CMakeLists.txt").exists() {
+        panic!(
+            "mlx-c submodule not found. Please run:\n\
+             \n\
+             git submodule update --init --recursive\n\
+             \n\
+             to clone the mlx-c dependency."
+        );
     }
+
+    // Build mlx-c via CMake (fetches and builds MLX C++ as a dependency)
+    let dst = cmake::Config::new(&mlx_c_dir)
+        .define("MLX_BUILD_TESTS", "OFF")
+        .define("MLX_BUILD_EXAMPLES", "OFF")
+        .define("MLX_BUILD_BENCHMARKS", "OFF")
+        .define("BUILD_SHARED_LIBS", "OFF")
+        .build();
+
+    // Link paths — CMake may output to lib/ or lib64/
+    let lib_dir = dst.join("lib");
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    let lib64_dir = dst.join("lib64");
+    if lib64_dir.exists() {
+        println!("cargo:rustc-link-search=native={}", lib64_dir.display());
+    }
+
+    // Link mlx-c and mlx static libraries
+    println!("cargo:rustc-link-lib=static=mlxc");
+    println!("cargo:rustc-link-lib=static=mlx");
 
     // Apple system frameworks required by MLX
     println!("cargo:rustc-link-lib=framework=Metal");
-    println!("cargo:rustc-link-lib=framework=MetalPerformanceShaders");
-    println!("cargo:rustc-link-lib=framework=MetalPerformanceShadersGraph");
-    println!("cargo:rustc-link-lib=framework=Accelerate");
     println!("cargo:rustc-link-lib=framework=Foundation");
+    println!("cargo:rustc-link-lib=framework=Accelerate");
+    println!("cargo:rustc-link-lib=framework=MetalPerformanceShaders");
 
     // C++ standard library (MLX is C++)
     println!("cargo:rustc-link-lib=c++");
 
-    println!("cargo:rerun-if-env-changed=MLX_DIR");
-    println!("cargo:rerun-if-env-changed=RELEASE_RPATH_ORIGIN");
+    // Rerun if mlx-c sources change
+    println!("cargo:rerun-if-changed=mlx-c/CMakeLists.txt");
     println!("cargo:rerun-if-changed=build.rs");
 }

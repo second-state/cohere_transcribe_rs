@@ -214,6 +214,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -228,43 +230,11 @@ jobs:
           key: macos-arm64-mlx-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: macos-arm64-mlx-cargo-
 
-      # Install the MLX C++ library and its headers via Homebrew.
-      # mlx-c (C bindings) is not in Homebrew, so we build it from source below.
-      - name: Install MLX C++ via Homebrew
-        id: mlx-version
-        run: |
-          brew install mlx
-          MLX_VER=$(brew info --json mlx | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['versions']['stable'])")
-          echo "version=$MLX_VER" >> "$GITHUB_OUTPUT"
-          echo "MLX version: $MLX_VER"
-
-      # Cache mlx-c to avoid rebuilding on every run.
-      # Cache key includes the mlx version so an mlx upgrade triggers a rebuild.
-      - name: Cache mlx-c build
-        id: cache-mlxc
-        uses: actions/cache@v4
-        with:
-          path: /opt/mlx
-          key: mlxc-${{ runner.os }}-${{ steps.mlx-version.outputs.version }}
-          restore-keys: mlxc-${{ runner.os }}-
-
-      - name: Build and install mlx-c from source
-        if: steps.cache-mlxc.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 https://github.com/ml-explore/mlx-c.git /tmp/mlx-c
-          cmake -S /tmp/mlx-c -B /tmp/mlx-c/build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix mlx)" \
-            -DCMAKE_INSTALL_PREFIX=/opt/mlx
-          cmake --build /tmp/mlx-c/build --parallel "$(sysctl -n hw.logicalcpu)"
-          sudo cmake --install /tmp/mlx-c/build
-
       - name: cargo check — MLX backend
-        run: MLX_DIR=/opt/mlx cargo check --no-default-features --features mlx
+        run: cargo check --no-default-features --features mlx
 
       - name: cargo build --release — MLX backend
-        # RPATH for libmlxc.dylib is baked in by build.rs — no DYLD_LIBRARY_PATH needed.
-        run: MLX_DIR=/opt/mlx cargo build --release --no-default-features --features mlx
+        run: cargo build --release --no-default-features --features mlx
 
       - name: Smoke test — CLI --help
         run: ./target/release/transcribe --help
