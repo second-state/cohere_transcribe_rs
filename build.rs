@@ -88,6 +88,22 @@ fn build_mlx() {
     // C++ standard library (MLX is C++)
     println!("cargo:rustc-link-lib=c++");
 
+    // MLX C++ code uses @available() checks that reference ___isPlatformVersionAtLeast
+    // from the compiler runtime. Rust passes -nodefaultlibs to the linker, so the
+    // compiler runtime is not automatically linked. We must explicitly link it.
+    // Find the clang resource directory to locate libclang_rt.osx.a.
+    let clang_rt = std::process::Command::new("clang")
+        .args(["--print-file-name", "libclang_rt.osx.a"])
+        .output()
+        .expect("failed to run clang --print-file-name");
+    let clang_rt_path = String::from_utf8(clang_rt.stdout)
+        .expect("non-utf8 clang output")
+        .trim()
+        .to_string();
+    if std::path::Path::new(&clang_rt_path).exists() {
+        println!("cargo:rustc-link-arg={}", clang_rt_path);
+    }
+
     // Rerun if mlx-c sources change
     println!("cargo:rerun-if-changed=mlx-c/CMakeLists.txt");
     println!("cargo:rerun-if-changed=build.rs");
