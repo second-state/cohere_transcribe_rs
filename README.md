@@ -381,3 +381,29 @@ or use the macOS MLX backend on Apple hardware.
 **`ELF section name out of range` at link time** (Linux)
 libtorch is on a Docker volume-mounted macOS path. Move it to a native Linux
 path such as `/opt/libtorch`.
+
+---
+
+## Performance
+
+Benchmarked on an **M4 Mac Mini** (MLX/Metal GPU backend). Model loading takes a few
+seconds on first run, but once loaded, inference is **10x–24x faster than real-time**.
+NVIDIA GPU builds (CUDA libtorch) will be significantly faster still.
+
+### CLI
+
+| Audio | Duration | Wall time | Notes |
+|-------|----------|-----------|-------|
+| Demo WAV (real speech) | 5.44 s | 12.9 s | Includes 3.3 s model load + Metal compile |
+| Synthetic 60 s tone | 60 s | 18.1 s | Tests chunking (chunks split at ~35 s) |
+
+### API Server
+
+The server loads the model once at startup. Subsequent requests skip model loading
+and Metal shader compilation, making warm requests extremely fast.
+
+| Request | Audio | Response time | Notes |
+|---------|-------|---------------|-------|
+| 1st request (cold Metal) | 5.44 s | 8.3 s | Includes Metal shader compilation |
+| 2nd+ requests (warm) | 5.44 s | 0.4 s | 13x faster than audio duration |
+| 60 s chunked (warm) | 60 s | 2.5 s | 24x faster than audio duration |
