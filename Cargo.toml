@@ -7,7 +7,7 @@ description = "Rust implementation for the CohereLabs/cohere-transcribe-03-2026 
 repository = "https://github.com/second-state/cohere_transcribe_rs"
 keywords = ["speech-to-text", "transcription", "asr", "mlx", "libtorch"]
 categories = ["multimedia::audio", "command-line-utilities"]
-exclude = ["mlx-c/", ".github/", "tests/", "models/", "tools/"]
+exclude = ["mlx-c/", ".github/", "tests/", "models/", "tools/", ".gitmodules"]
 
 [[bin]]
 name = "transcribe"
