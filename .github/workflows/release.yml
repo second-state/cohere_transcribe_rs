@@ -31,11 +31,13 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           pip install -q huggingface_hub sentencepiece
-          export PATH="$HOME/.local/bin:$PATH"
-          huggingface-cli download CohereLabs/cohere-transcribe-03-2026 \
-            --include "tokenizer.model" \
-            --local-dir models/cohere-transcribe-03-2026 \
-            --token "$HF_TOKEN"
+          python3 -c "
+          from huggingface_hub import snapshot_download
+          snapshot_download('CohereLabs/cohere-transcribe-03-2026',
+                           local_dir='models/cohere-transcribe-03-2026',
+                           allow_patterns=['tokenizer.model'],
+                           token='$HF_TOKEN')
+          "
           python tools/extract_vocab.py --model_dir models/cohere-transcribe-03-2026
 
       - name: Upload vocab artifact

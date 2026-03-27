@@ -54,10 +54,12 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           pip install --quiet huggingface_hub sentencepiece
-          export PATH="$HOME/.local/bin:$PATH"
-          huggingface-cli download CohereLabs/cohere-transcribe-03-2026 \
-            --local-dir "$MODEL_DIR" \
-            --token "$HF_TOKEN"
+          python3 -c "
+          from huggingface_hub import snapshot_download
+          snapshot_download('CohereLabs/cohere-transcribe-03-2026',
+                           local_dir='$MODEL_DIR',
+                           token='$HF_TOKEN')
+          "
           python tools/extract_vocab.py --model_dir "$MODEL_DIR"
           ls -lh "$MODEL_DIR/"
 
