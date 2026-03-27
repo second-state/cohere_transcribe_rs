@@ -280,21 +280,67 @@ jobs:
           echo "Transcript: $result"
           echo "$result" | grep -qi "fox\|lazy\|dog"
 
-      - name: Server — health + transcription
+      - name: Server — start, health check, transcription, stop
         if: steps.sve.outputs.available == 'true'
         run: |
+          # Start server in background
           ./target/release/transcribe-server \
-            --model-dir "$MODEL_DIR" --port 18080 &
+            --model-dir "$MODEL_DIR" \
+            --port 18080 \
+            --verbose &
           SERVER_PID=$!
+          echo "Server PID: $SERVER_PID"
+
+          # Wait for server ready (up to 120 s — model loading takes time)
           for i in $(seq 1 120); do
-            curl -sf http://localhost:18080/health > /dev/null 2>&1 && break; sleep 1
+            if curl -sf http://localhost:18080/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"; break
+            fi
+            sleep 1
           done
+
+          # Health endpoint
           curl -sf http://localhost:18080/health | grep -q '"ok"'
+          echo "Health OK"
+
+          # JSON response
+          json_resp=$(curl -sf \
+            -X POST http://localhost:18080/v1/audio/transcriptions \
+            -F "file=@tests/fixtures/sample2.wav;type=audio/wav" \
+            -F "model=cohere-transcribe" \
+            -F "language=en" \
+            -F "response_format=json")
+          echo "JSON: $json_resp"
+          echo "$json_resp" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          assert 'text' in d, 'Missing text'
+          print('text:', d['text'])
+          "
+
+          # Text response
           curl -sf \
             -X POST http://localhost:18080/v1/audio/transcriptions \
             -F "file=@tests/fixtures/sample2.wav;type=audio/wav" \
-            -F "model=cohere-transcribe" | python3 -c "import sys,json; assert 'text' in json.load(sys.stdin)"
+            -F "model=cohere-transcribe" \
+            -F "response_format=text"
+          echo
+
+          # verbose_json response
+          curl -sf \
+            -X POST http://localhost:18080/v1/audio/transcriptions \
+            -F "file=@tests/fixtures/sample2.wav;type=audio/wav" \
+            -F "model=cohere-transcribe" \
+            -F "response_format=verbose_json" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          assert d['task']=='transcribe'
+          assert 'text' in d and 'duration' in d and 'segments' in d
+          print('verbose_json OK — duration:', d['duration'])
+          "
+
           kill $SERVER_PID
+          echo "All server integration tests passed"
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Integration test — macOS Apple Silicon, mlx backend
@@ -340,6 +386,12 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "14.0"
 
+      - name: Copy mlx.metallib next to binaries
+        run: |
+          # MLX runtime looks for mlx.metallib in the same directory as the binary
+          find target/release/build -name "mlx.metallib" -exec cp {} target/release/ \;
+          ls -lh target/release/mlx.metallib
+
       - name: CLI — transcribe sample2.wav
         run: |
           result=$(./target/release/transcribe \
@@ -349,17 +401,63 @@ jobs:
           echo "Transcript: $result"
           echo "$result" | grep -qi "fox\|lazy\|dog"
 
-      - name: Server — health + transcription
+      - name: Server — start, health check, transcription, stop
         run: |
+          # Start server in background
           ./target/release/transcribe-server \
-            --model-dir "$MODEL_DIR" --port 18080 &
+            --model-dir "$MODEL_DIR" \
+            --port 18080 \
+            --verbose &
           SERVER_PID=$!
+          echo "Server PID: $SERVER_PID"
+
+          # Wait for server ready (up to 120 s — model loading takes time)
           for i in $(seq 1 120); do
-            curl -sf http://localhost:18080/health > /dev/null 2>&1 && break; sleep 1
+            if curl -sf http://localhost:18080/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"; break
+            fi
+            sleep 1
           done
+
+          # Health endpoint
           curl -sf http://localhost:18080/health | grep -q '"ok"'
+          echo "Health OK"
+
+          # JSON response
+          json_resp=$(curl -sf \
+            -X POST http://localhost:18080/v1/audio/transcriptions \
+            -F "file=@tests/fixtures/sample2.wav;type=audio/wav" \
+            -F "model=cohere-transcribe" \
+            -F "language=en" \
+            -F "response_format=json")
+          echo "JSON: $json_resp"
+          echo "$json_resp" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          assert 'text' in d, 'Missing text'
+          print('text:', d['text'])
+          "
+
+          # Text response
           curl -sf \
             -X POST http://localhost:18080/v1/audio/transcriptions \
             -F "file=@tests/fixtures/sample2.wav;type=audio/wav" \
-            -F "model=cohere-transcribe" | python3 -c "import sys,json; assert 'text' in json.load(sys.stdin)"
+            -F "model=cohere-transcribe" \
+            -F "response_format=text"
+          echo
+
+          # verbose_json response
+          curl -sf \
+            -X POST http://localhost:18080/v1/audio/transcriptions \
+            -F "file=@tests/fixtures/sample2.wav;type=audio/wav" \
+            -F "model=cohere-transcribe" \
+            -F "response_format=verbose_json" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          assert d['task']=='transcribe'
+          assert 'text' in d and 'duration' in d and 'segments' in d
+          print('verbose_json OK — duration:', d['duration'])
+          "
+
           kill $SERVER_PID
+          echo "All server integration tests passed"
