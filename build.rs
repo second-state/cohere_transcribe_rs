@@ -88,15 +88,6 @@ fn build_mlx() {
     // C++ standard library (MLX is C++)
     println!("cargo:rustc-link-lib=c++");
 
-    // Set the minimum macOS deployment target for the linker.
-    // MLX C++ code uses @available() checks that reference ___isPlatformVersionAtLeast
-    // from the compiler runtime. The Rust linker must target the same (or higher)
-    // macOS version so the runtime is linked.
-    println!(
-        "cargo:rustc-link-arg=-mmacosx-version-min={}",
-        deployment_target
-    );
-
     // Rerun if mlx-c sources change
     println!("cargo:rerun-if-changed=mlx-c/CMakeLists.txt");
     println!("cargo:rerun-if-changed=build.rs");

@@ -95,7 +95,7 @@ jobs:
               https://github.com/second-state/libtorch-releases/releases/download/v2.7.1/libtorch-cxx11-abi-aarch64-cuda12.6-2.7.1.tar.gz
 
           # ── macOS Apple Silicon — MLX backend ────────────────────────────
-          - os: macos-15
+          - os: macos-latest
             name: macOS Apple Silicon
             backend: mlx
             asset-name: transcribe-macos-aarch64

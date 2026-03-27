@@ -210,7 +210,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   macos-mlx:
     name: macOS Apple Silicon (mlx)
-    runs-on: macos-15   # macOS 15 on Apple Silicon (M-series)
+    runs-on: macos-latest   # macOS 14+ on Apple Silicon (M-series)
 
     steps:
       - uses: actions/checkout@v4

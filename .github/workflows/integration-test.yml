@@ -301,7 +301,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   test-macos-mlx:
     name: Integration — macOS Apple Silicon (mlx)
-    runs-on: macos-15
+    runs-on: macos-latest
     if: |
       always() && (
         github.event_name == 'schedule' ||
