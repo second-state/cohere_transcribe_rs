@@ -118,9 +118,9 @@ impl DecoderFFN {
 // ---------------------------------------------------------------------------
 pub struct DecoderLayer {
     norm1: (Array, Array),
-    pub self_attn: DecoderAttn,
+    self_attn: DecoderAttn,
     norm2: (Array, Array),
-    pub cross_attn: DecoderAttn,
+    cross_attn: DecoderAttn,
     norm3: (Array, Array),
     ffn: DecoderFFN,
 }
@@ -236,8 +236,6 @@ pub struct TransformerDecoder {
     final_ln_b: Array,
     head_w: Array,
     head_b: Array,
-    n_heads: i32,
-    head_dim: i32,
     hidden: i32,
 }
 
@@ -246,7 +244,6 @@ impl TransformerDecoder {
         let dec = &cfg.transf_decoder.config_dict;
         let hidden = dec.hidden_size as i32;
         let n_heads = dec.num_attention_heads as i32;
-        let head_dim = hidden / n_heads;
 
         let emb_prefix = "transf_decoder._embedding.";
         let dec_prefix = "transf_decoder._decoder.";
@@ -289,8 +286,6 @@ impl TransformerDecoder {
             final_ln_b,
             head_w,
             head_b,
-            n_heads,
-            head_dim,
             hidden,
         })
     }

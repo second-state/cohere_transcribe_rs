@@ -10,6 +10,7 @@ use super::ffi::{self, mlx_device, mlx_device_type, mlx_stream};
 
 struct MlxContext {
     stream: mlx_stream,
+    #[allow(dead_code)]
     device: mlx_device,
 }
 

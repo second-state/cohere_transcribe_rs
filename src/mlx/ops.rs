@@ -275,7 +275,7 @@ pub fn scaled_dot_product_attention(
     let mask_mode = if mask.is_some() {
         CString::new("additive").unwrap()
     } else {
-        CString::new("none").unwrap()
+        CString::new("").unwrap()
     };
     let mask_ptr = mask.map_or(std::ptr::null_mut(), |m| m.ptr);
     let sinks_ptr: ffi::mlx_array = std::ptr::null_mut();

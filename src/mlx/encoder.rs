@@ -505,7 +505,6 @@ pub struct ConformerEncoder {
     layers: Vec<ConformerLayer>,
     enc_dec_proj_w: Option<Array>,
     enc_dec_proj_b: Option<Array>,
-    n_heads: i32,
     d_model: i32,
 }
 
@@ -539,7 +538,6 @@ impl ConformerEncoder {
             layers,
             enc_dec_proj_w,
             enc_dec_proj_b,
-            n_heads,
             d_model,
         })
     }

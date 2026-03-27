@@ -7,7 +7,6 @@
 use std::ffi::c_void;
 
 use super::ffi::{self, mlx_array, mlx_dtype};
-use super::stream::default_stream;
 
 // ---------------------------------------------------------------------------
 // Array
