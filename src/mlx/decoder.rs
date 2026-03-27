@@ -186,7 +186,7 @@ impl DecoderLayer {
     ) -> (Array, Array, Array) {
         // --- Self-attention ---
         let (nw1, nb1) = &self.norm1;
-        let normed = ops::layer_norm(hidden, nw1, nb1);
+        let normed = ops::layer_norm(hidden, nw1, nb1, 1e-5);
         let (k_new, v_new) = self.self_attn.project_kv(&normed);
 
         let (k_full, v_full) = match (self_k_cache, self_v_cache) {
@@ -202,13 +202,13 @@ impl DecoderLayer {
 
         // --- Cross-attention ---
         let (nw2, nb2) = &self.norm2;
-        let normed2 = ops::layer_norm(&hidden, nw2, nb2);
+        let normed2 = ops::layer_norm(&hidden, nw2, nb2, 1e-5);
         let cross_out = self.cross_attn.forward(&normed2, cross_k, cross_v, None);
         let hidden = ops::add(&hidden, &cross_out);
 
         // --- FFN ---
         let (nw3, nb3) = &self.norm3;
-        let normed3 = ops::layer_norm(&hidden, nw3, nb3);
+        let normed3 = ops::layer_norm(&hidden, nw3, nb3, 1e-5);
         let ffn_out = self.ffn.forward(&normed3);
         let hidden = ops::add(&hidden, &ffn_out);
 
@@ -341,7 +341,7 @@ impl TransformerDecoder {
         let pe = ops::reshape(&pe, &[1, 1, self.hidden]);
 
         let x = ops::add(&emb, &pe);
-        let x = ops::layer_norm(&x, &self.emb_norm_w, &self.emb_norm_b);
+        let x = ops::layer_norm(&x, &self.emb_norm_w, &self.emb_norm_b, 1e-5);
 
         let mut new_kv: Vec<(Option<Array>, Option<Array>)> = Vec::with_capacity(self.layers.len());
         let mut hidden = x;
@@ -362,7 +362,7 @@ impl TransformerDecoder {
         }
 
         // Final layer norm + classification head
-        let hidden = ops::layer_norm(&hidden, &self.final_ln_w, &self.final_ln_b);
+        let hidden = ops::layer_norm(&hidden, &self.final_ln_w, &self.final_ln_b, 1e-5);
         // Squeeze T dim: (1, 1, hidden) → (1, hidden)
         let hidden = ops::squeeze(&hidden, &[1]);
         let logits = ops::linear(&hidden, &self.head_w, &self.head_b); // (1, vocab)

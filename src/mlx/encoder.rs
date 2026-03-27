@@ -513,23 +513,23 @@ impl ConformerLayer {
 
     fn forward(&self, x: &Array, pos_emb: &Array) -> Array {
         let (nw1, nb1) = &self.norm_ff1;
-        let ff1_out = self.ff1.forward(&ops::layer_norm(x, nw1, nb1));
+        let ff1_out = self.ff1.forward(&ops::layer_norm(x, nw1, nb1, 1e-5));
         let x = ops::add(x, &ops::scale(&ff1_out, 0.5));
 
         let (nw2, nb2) = &self.norm_self_att;
-        let attn_out = self.self_attn.forward(&ops::layer_norm(&x, nw2, nb2), pos_emb);
+        let attn_out = self.self_attn.forward(&ops::layer_norm(&x, nw2, nb2, 1e-5), pos_emb);
         let x = ops::add(&x, &attn_out);
 
         let (nw3, nb3) = &self.norm_conv;
-        let conv_out = self.conv.forward(&ops::layer_norm(&x, nw3, nb3));
+        let conv_out = self.conv.forward(&ops::layer_norm(&x, nw3, nb3, 1e-5));
         let x = ops::add(&x, &conv_out);
 
         let (nw4, nb4) = &self.norm_ff2;
-        let ff2_out = self.ff2.forward(&ops::layer_norm(&x, nw4, nb4));
+        let ff2_out = self.ff2.forward(&ops::layer_norm(&x, nw4, nb4, 1e-5));
         let x = ops::add(&x, &ops::scale(&ff2_out, 0.5));
 
         let (nw5, nb5) = &self.norm_out;
-        ops::layer_norm(&x, nw5, nb5)
+        ops::layer_norm(&x, nw5, nb5, 1e-5)
     }
 }
 
