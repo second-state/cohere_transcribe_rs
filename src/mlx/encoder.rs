@@ -286,33 +286,14 @@ fn batch_norm_nlc(
     let w = ops::reshape(weight, &[1, 1, c]);
     let b = ops::reshape(bias, &[1, 1, c]);
 
-    // (x - mean) / sqrt(var + eps)
+    // (x - mean) * rsqrt(var + eps) * w + b
+    // Using rsqrt (1/sqrt) keeps the entire computation on GPU — no CPU round-trips.
     let x_centered = ops::sub(x, &rm);
-    // sqrt(var + eps): var + eps then rsqrt
     let var_eps = ops::add(&rv, &Array::from_data_f32(&[eps], &[1, 1, 1]));
-    let std = ops_sqrt(&var_eps);
-    let x_norm = ops::mul(&x_centered, &ops_recip(&std));
+    let inv_std = ops::rsqrt(&var_eps);
+    let x_norm = ops::mul(&x_centered, &inv_std);
 
     ops::add(&ops::mul(&x_norm, &w), &b)
-}
-
-fn ops_sqrt(x: &Array) -> Array {
-    // sqrt via pow(0.5) — not in ops yet, use element-wise via take trick.
-    // Simplest: create scalar 0.5 and use mlx_power if available, else approximate.
-    // Using: sqrt(x) = exp(0.5 * log(x)) — need log and exp.
-    // TODO: expose mlx_sqrt directly in ops.rs.
-    // For now: use a Rust-side computation for this single-use stats scalar.
-    let data = x.to_vec_f32();
-    let sqrt_data: Vec<f32> = data.iter().map(|v| v.sqrt()).collect();
-    let shape = x.shape();
-    Array::from_data_f32(&sqrt_data, &shape)
-}
-
-fn ops_recip(x: &Array) -> Array {
-    let data = x.to_vec_f32();
-    let recip_data: Vec<f32> = data.iter().map(|v| 1.0 / v).collect();
-    let shape = x.shape();
-    Array::from_data_f32(&recip_data, &shape)
 }
 
 // ---------------------------------------------------------------------------

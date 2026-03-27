@@ -1,13 +1,85 @@
 # cohere_transcribe_rs
 
-[![CI](https://github.com/your-org/cohere_transcribe_rs/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/cohere_transcribe_rs/actions/workflows/ci.yml)
+[![CI](https://github.com/second-state/cohere_transcribe_rs/actions/workflows/ci.yml/badge.svg)](https://github.com/second-state/cohere_transcribe_rs/actions/workflows/ci.yml)
+[![Release](https://github.com/second-state/cohere_transcribe_rs/actions/workflows/release.yml/badge.svg)](https://github.com/second-state/cohere_transcribe_rs/releases)
 
 Transcribe speech to text using the
 [CohereLabs/cohere-transcribe-03-2026](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026)
-model — a fast Rust CLI with no Python or PyTorch required at runtime.
+model — a fast Rust CLI and OpenAI-compatible API server with no Python or PyTorch
+required at runtime.
 
 Supports English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Greek,
 Arabic, Japanese, Chinese, Vietnamese, and Korean.
+
+---
+
+## Quick Start (pre-built binaries)
+
+No build tools needed — just download and run.
+
+### 1. Download model weights
+
+The model is gated — you must log in to HuggingFace and accept the license terms first:
+<https://huggingface.co/CohereLabs/cohere-transcribe-03-2026>
+
+Then download:
+
+```bash
+pip install huggingface_hub
+huggingface-cli download CohereLabs/cohere-transcribe-03-2026 \
+  --local-dir models/cohere-transcribe-03-2026
+```
+
+### 2. Download the release for your platform
+
+Go to [Releases](https://github.com/second-state/cohere_transcribe_rs/releases) and
+download the zip for your platform:
+
+| Platform | Asset |
+|----------|-------|
+| Linux x86\_64 (CPU) | `transcribe-linux-x86_64.zip` |
+| Linux x86\_64 (CUDA 12.6) | `transcribe-linux-x86_64-cuda.zip` |
+| Linux aarch64 (CPU, SVE) | `transcribe-linux-aarch64.zip` |
+| Linux aarch64 (CUDA 12.6) | `transcribe-linux-aarch64-cuda.zip` |
+| macOS Apple Silicon | `transcribe-macos-aarch64.zip` |
+
+```bash
+# Example for Linux x86_64:
+unzip transcribe-linux-x86_64.zip
+cd transcribe-linux-x86_64
+```
+
+### 3. Copy vocab.json into the model directory
+
+The release includes a pre-generated `vocab.json`. Copy it to the model folder:
+
+```bash
+cp vocab.json ../models/cohere-transcribe-03-2026/
+```
+
+### 4. Test the CLI
+
+```bash
+./transcribe --model-dir ../models/cohere-transcribe-03-2026 --language en recording.wav
+```
+
+No `LD_LIBRARY_PATH` or `DYLD_LIBRARY_PATH` needed — the binary has RPATH baked in
+and finds `libtorch/` (Linux) or `mlx.metallib` (macOS) in the same directory.
+
+### 5. Test the API server
+
+```bash
+# Start the server
+./transcribe-server --model-dir ../models/cohere-transcribe-03-2026 --port 8080 &
+
+# Wait for "Listening on ..." message, then:
+curl -X POST http://localhost:8080/v1/audio/transcriptions \
+  -F "file=@recording.wav" \
+  -F "model=cohere-transcribe" \
+  -F "language=en"
+```
+
+The server is OpenAI Whisper API compatible — works with any OpenAI client library.
 
 ---
 

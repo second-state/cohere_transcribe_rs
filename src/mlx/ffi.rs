@@ -261,6 +261,9 @@ extern "C" {
     // Math functions
     pub fn mlx_sigmoid(res: *mut mlx_array, a: mlx_array, s: mlx_stream) -> c_int;
     pub fn mlx_maximum(res: *mut mlx_array, a: mlx_array, b: mlx_array, s: mlx_stream) -> c_int;
+    pub fn mlx_sqrt(res: *mut mlx_array, a: mlx_array, s: mlx_stream) -> c_int;
+    pub fn mlx_rsqrt(res: *mut mlx_array, a: mlx_array, s: mlx_stream) -> c_int;
+    pub fn mlx_reciprocal(res: *mut mlx_array, a: mlx_array, s: mlx_stream) -> c_int;
 
     // Activation-related
     pub fn mlx_softmax_axes(

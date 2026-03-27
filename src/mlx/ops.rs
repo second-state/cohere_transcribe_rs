@@ -150,6 +150,18 @@ pub fn mul(a: &Array, b: &Array) -> Array {
     res
 }
 
+pub fn sqrt(a: &Array) -> Array {
+    let mut res = Array::empty();
+    unsafe { ffi::mlx_sqrt(&mut res.ptr, a.ptr, default_stream()) };
+    res
+}
+
+pub fn rsqrt(a: &Array) -> Array {
+    let mut res = Array::empty();
+    unsafe { ffi::mlx_rsqrt(&mut res.ptr, a.ptr, default_stream()) };
+    res
+}
+
 /// Scale by a scalar — creates a temporary scalar Array.
 pub fn scale(a: &Array, s: f32) -> Array {
     let scalar = unsafe { Array::from_ptr(ffi::mlx_array_new_float(s)) };

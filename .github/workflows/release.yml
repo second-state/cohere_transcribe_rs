@@ -1,8 +1,8 @@
 name: Release
 
 # Triggered when a GitHub Release is published.
-# Builds CLI + API-server binaries for all three platforms, bundles each with
-# its native runtime library (libtorch on Linux, mlx-c + MLX on macOS), and
+# Builds CLI + API-server binaries for all five platforms, bundles each with
+# its native runtime library (libtorch on Linux, mlx.metallib on macOS), and
 # uploads the resulting zip files as release assets.
 
 on:
@@ -11,7 +11,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  LIBTORCH_BYPASS_VERSION_CHECK: "1"
 
 jobs:
 
@@ -139,23 +138,25 @@ jobs:
           tar xzf libtorch.tar.gz          # → ./libtorch/
           rm libtorch.tar.gz
 
-      # ── Set linker flags for CUDA builds ──────────────────────────────────
-      - name: Set CUDA linker flags
-        if: matrix.needs-cuda
+      # ── Set linker flags (Linux only) ─────────────────────────────────────
+      # RPATH $ORIGIN/libtorch/lib lets the binary find libtorch in the
+      # adjacent libtorch/ folder when deployed, with no LD_LIBRARY_PATH.
+      - name: Set linker flags
+        if: matrix.backend == 'tch' && runner.os == 'Linux'
         run: |
-          FLAGS="-C link-arg=-Wl,-rpath-link,/usr/local/cuda/lib64"
+          FLAGS="-C link-arg=-Wl,-rpath-link,${{ github.workspace }}/libtorch/lib -C link-arg=-Wl,-rpath,\$ORIGIN/libtorch/lib"
+          if [ "${{ matrix.needs-cuda }}" = "true" ]; then
+            FLAGS="$FLAGS -C link-arg=-Wl,-rpath-link,/usr/local/cuda/lib64"
+            echo "LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          fi
           echo "RUSTFLAGS=$FLAGS" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
       # ── Build ─────────────────────────────────────────────────────────────
       - name: Build release binaries (tch-backend)
         if: matrix.backend == 'tch'
         env:
           LIBTORCH: ${{ github.workspace }}/libtorch
-          # RELEASE_RPATH_ORIGIN=1 makes build.rs emit $ORIGIN/libtorch/lib
-          # instead of the absolute workspace path, so the binaries find
-          # libtorch in the adjacent libtorch/ folder when deployed.
-          RELEASE_RPATH_ORIGIN: "1"
+          LIBTORCH_BYPASS_VERSION_CHECK: "1"
         run: cargo build --release
 
       - name: Build release binaries (mlx)
@@ -175,18 +176,18 @@ jobs:
         if: matrix.backend == 'tch'
         run: |
           DIR=${{ matrix.asset-name }}
-          mkdir -p "$DIR/libtorch/lib"
+          mkdir -p "$DIR"
 
           # Binaries
           cp target/release/transcribe        "$DIR/transcribe"
           cp target/release/transcribe-server "$DIR/transcribe-server"
           cp vocab.json                       "$DIR/vocab.json"
 
-          # Runtime libraries only (skip headers and cmake files to save space)
-          cp -r libtorch/lib/. "$DIR/libtorch/lib/"
-
           # Strip debug info from our binaries
           strip "$DIR/transcribe" "$DIR/transcribe-server"
+
+          # Bundle libtorch (runtime libraries — the binary finds them via RPATH)
+          cp -r libtorch "$DIR/libtorch"
 
           zip -r "$DIR.zip" "$DIR"
           echo "=== Package contents ==="
