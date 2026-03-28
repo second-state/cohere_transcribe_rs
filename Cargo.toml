@@ -1,5 +1,5 @@
 [package]
-name = "cohere_transcribe_rs"
+name = "cohere-transcribe-rs"
 version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
